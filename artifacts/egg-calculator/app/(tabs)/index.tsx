@@ -11,305 +11,176 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { useColors } from "@/hooks/useColors";
 
 const EGG_CATEGORIES = [
-  { id: "small", label: "Small Egg" },
-  { id: "normal", label: "Normal Egg" },
-  { id: "crack", label: "Crack Egg" },
-  { id: "dirty", label: "Dirty Egg" },
-  { id: "double_yolk", label: "Double Yolk Egg" },
-  { id: "brown", label: "Brown Egg" },
-  { id: "liquid", label: "Liquid Egg" },
+  { id: "small", label: "Small Egg", dot: "#F59E0B" },
+  { id: "normal", label: "Normal Egg", dot: "#22C55E" },
+  { id: "crack", label: "Crack Egg", dot: "#FB7185" },
+  { id: "dirty", label: "Dirty Egg", dot: "#FB923C" },
+  { id: "double_yolk", label: "Double Yolk", dot: "#A78BFA" },
+  { id: "brown", label: "Brown Egg", dot: "#92400E" },
+  { id: "liquid", label: "Liquid Egg", dot: "#60A5FA" },
 ] as const;
 
 type CategoryId = (typeof EGG_CATEGORIES)[number]["id"];
 
 const EGGS_PER_TRAY = 30;
 const TRAYS_PER_CARTON = 12;
-const EGGS_PER_CARTON = EGGS_PER_TRAY * TRAYS_PER_CARTON; // 360
+const EGGS_PER_CARTON = EGGS_PER_TRAY * TRAYS_PER_CARTON;
 
-function calculateTotals(counts: Record<CategoryId, number>) {
-  const totalEggs = Object.values(counts).reduce((sum, v) => sum + v, 0);
-  const totalTrays = Math.floor(totalEggs / EGGS_PER_TRAY);
-  const remainingEggsInTray = totalEggs % EGGS_PER_TRAY;
-  const cartons = Math.floor(totalTrays / TRAYS_PER_CARTON);
-  const remainingTrays = totalTrays % TRAYS_PER_CARTON;
-  return { totalEggs, totalTrays, cartons, remainingTrays, remainingEggsInTray };
+type Entry = { cartons: string; trays: string };
+
+function toNum(s: string) {
+  const n = parseInt(s, 10);
+  return isNaN(n) || n < 0 ? 0 : n;
 }
 
-const CATEGORY_COLORS: Record<CategoryId, { bg: string; dot: string }> = {
-  small: { bg: "#FEF9EE", dot: "#F59E0B" },
-  normal: { bg: "#F0FDF4", dot: "#22C55E" },
-  crack: { bg: "#FFF1F2", dot: "#FB7185" },
-  dirty: { bg: "#FFF7ED", dot: "#FB923C" },
-  double_yolk: { bg: "#F5F3FF", dot: "#A78BFA" },
-  brown: { bg: "#FEF3C7", dot: "#92400E" },
-  liquid: { bg: "#EFF6FF", dot: "#60A5FA" },
-};
+function calcTotals(entries: Record<CategoryId, Entry>) {
+  let totalEggs = 0;
+  for (const e of Object.values(entries)) {
+    totalEggs += toNum(e.cartons) * EGGS_PER_CARTON + toNum(e.trays) * EGGS_PER_TRAY;
+  }
+  const totalTrays = Math.floor(totalEggs / EGGS_PER_TRAY);
+  const remainEggs = totalEggs % EGGS_PER_TRAY;
+  const cartons = Math.floor(totalTrays / TRAYS_PER_CARTON);
+  const remainTrays = totalTrays % TRAYS_PER_CARTON;
+  return { totalEggs, totalTrays, cartons, remainTrays, remainEggs };
+}
+
+const initEntries = (): Record<CategoryId, Entry> =>
+  Object.fromEntries(
+    EGG_CATEGORIES.map((c) => [c.id, { cartons: "", trays: "" }])
+  ) as Record<CategoryId, Entry>;
 
 export default function EggCalculator() {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
+  const [entries, setEntries] = useState<Record<CategoryId, Entry>>(initEntries);
 
-  const [counts, setCounts] = useState<Record<CategoryId, number>>(
-    () =>
-      Object.fromEntries(EGG_CATEGORIES.map((c) => [c.id, 0])) as Record<
-        CategoryId,
-        number
-      >
-  );
-
-  const [inputValues, setInputValues] = useState<Record<CategoryId, string>>(
-    () =>
-      Object.fromEntries(EGG_CATEGORIES.map((c) => [c.id, "0"])) as Record<
-        CategoryId,
-        string
-      >
-  );
-
-  const updateCount = useCallback(
-    (id: CategoryId, value: number) => {
-      const clamped = Math.max(0, value);
-      setCounts((prev) => ({ ...prev, [id]: clamped }));
-      setInputValues((prev) => ({ ...prev, [id]: String(clamped) }));
+  const update = useCallback(
+    (id: CategoryId, field: "cartons" | "trays", val: string) => {
+      const clean = val.replace(/[^0-9]/g, "");
+      setEntries((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], [field]: clean },
+      }));
     },
     []
-  );
-
-  const handleIncrement = useCallback(
-    (id: CategoryId) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      updateCount(id, counts[id] + 1);
-    },
-    [counts, updateCount]
-  );
-
-  const handleDecrement = useCallback(
-    (id: CategoryId) => {
-      if (counts[id] > 0) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        updateCount(id, counts[id] - 1);
-      }
-    },
-    [counts, updateCount]
-  );
-
-  const handleTextChange = useCallback(
-    (id: CategoryId, text: string) => {
-      setInputValues((prev) => ({ ...prev, [id]: text }));
-      const parsed = parseInt(text, 10);
-      if (!isNaN(parsed) && parsed >= 0) {
-        setCounts((prev) => ({ ...prev, [id]: parsed }));
-      } else if (text === "" || text === "-") {
-        setCounts((prev) => ({ ...prev, [id]: 0 }));
-      }
-    },
-    []
-  );
-
-  const handleBlur = useCallback(
-    (id: CategoryId) => {
-      setInputValues((prev) => ({ ...prev, [id]: String(counts[id]) }));
-    },
-    [counts]
   );
 
   const handleReset = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    const zero = Object.fromEntries(
-      EGG_CATEGORIES.map((c) => [c.id, 0])
-    ) as Record<CategoryId, number>;
-    const zeroStr = Object.fromEntries(
-      EGG_CATEGORIES.map((c) => [c.id, "0"])
-    ) as Record<CategoryId, string>;
-    setCounts(zero);
-    setInputValues(zeroStr);
+    setEntries(initEntries());
   }, []);
 
-  const { totalEggs, totalTrays, cartons, remainingTrays, remainingEggsInTray } =
-    calculateTotals(counts);
+  const { totalEggs, totalTrays, cartons, remainTrays, remainEggs } =
+    calcTotals(entries);
 
-  const topPadding =
-    Platform.OS === "web" ? 67 : insets.top;
+  const topPad = Platform.OS === "web" ? 44 : insets.top;
+  const botPad = Platform.OS === "web" ? 20 : insets.bottom + 8;
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <View style={[styles.root, { paddingTop: topPad }]}>
       <StatusBar barStyle="light-content" backgroundColor="#7C2D12" />
 
       {/* Header */}
-      <View
-        style={[
-          styles.header,
-          { paddingTop: topPadding + 12, backgroundColor: "#7C2D12" },
-        ]}
-      >
-        <Text style={styles.headerTitle}>Egg Production</Text>
-        <Text style={styles.headerSubtitle}>Daily Count Calculator</Text>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerTitle}>Egg Production</Text>
+          <Text style={styles.headerSub}>Daily Count Calculator</Text>
+        </View>
         <TouchableOpacity style={styles.resetBtn} onPress={handleReset}>
-          <Text style={styles.resetBtnText}>Reset</Text>
+          <Text style={styles.resetText}>Reset</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Column labels */}
+      <View style={styles.colHeader}>
+        <Text style={[styles.colLabel, { flex: 1 }]}>Category</Text>
+        <Text style={[styles.colLabel, styles.colCenter]}>Cartons</Text>
+        <Text style={[styles.colLabel, styles.colCenter]}>Trays</Text>
+      </View>
+
+      {/* Category rows */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingBottom:
-              Platform.OS === "web" ? 34 + 20 : insets.bottom + 20,
-          },
-        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 6 }}
       >
-        {/* Info bar */}
-        <View style={[styles.infoBar, { backgroundColor: "#FEF3C7" }]}>
-          <InfoChip label="1 Tray" value="30 Eggs" />
-          <View style={styles.infoDivider} />
-          <InfoChip label="1 Carton" value="360 Eggs" />
-          <View style={styles.infoDivider} />
-          <InfoChip label="12 Trays" value="1 Carton" />
-        </View>
-
-        {/* Category inputs */}
-        <View style={styles.categoriesSection}>
-          <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>
-            EGG CATEGORIES
-          </Text>
-          {EGG_CATEGORIES.map((cat) => {
-            const catColors = CATEGORY_COLORS[cat.id];
-            return (
-              <View
-                key={cat.id}
-                style={[
-                  styles.categoryRow,
-                  { backgroundColor: catColors.bg, borderColor: catColors.dot + "40" },
-                ]}
-              >
-                <View style={styles.categoryLeft}>
-                  <View
-                    style={[styles.categoryDot, { backgroundColor: catColors.dot }]}
-                  />
-                  <Text style={[styles.categoryLabel, { color: colors.foreground }]}>
-                    {cat.label}
-                  </Text>
-                </View>
-                <View style={styles.counterRow}>
-                  <TouchableOpacity
-                    style={[styles.counterBtn, styles.decrementBtn]}
-                    onPress={() => handleDecrement(cat.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.decrementBtnText}>−</Text>
-                  </TouchableOpacity>
-                  <TextInput
-                    style={[styles.countInput, { color: colors.foreground }]}
-                    value={inputValues[cat.id]}
-                    onChangeText={(t) => handleTextChange(cat.id, t)}
-                    onBlur={() => handleBlur(cat.id)}
-                    keyboardType="numeric"
-                    selectTextOnFocus
-                    maxLength={6}
-                  />
-                  <TouchableOpacity
-                    style={[
-                      styles.counterBtn,
-                      styles.incrementBtn,
-                      { backgroundColor: catColors.dot },
-                    ]}
-                    onPress={() => handleIncrement(cat.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.incrementBtnText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Grand Total Card */}
-        <View style={[styles.totalCard, { backgroundColor: "#7C2D12" }]}>
-          <Text style={styles.totalTitle}>GRAND TOTAL</Text>
-
-          <View style={styles.totalEggsRow}>
-            <Text style={styles.totalEggsLabel}>Total Eggs</Text>
-            <Text style={styles.totalEggsValue}>{totalEggs.toLocaleString()}</Text>
-          </View>
-
-          <View style={styles.totalDivider} />
-
-          <View style={styles.totalEggsRow}>
-            <Text style={styles.totalEggsLabel}>Total Trays</Text>
-            <Text style={styles.totalEggsValue}>{totalTrays.toLocaleString()}</Text>
-          </View>
-
-          <View style={styles.totalDivider} />
-
-          <View style={styles.resultSection}>
-            <View style={styles.resultBox}>
-              <Text style={styles.resultValue}>{cartons}</Text>
-              <Text style={styles.resultUnit}>Cartons</Text>
+        {EGG_CATEGORIES.map((cat) => (
+          <View key={cat.id} style={styles.row}>
+            <View style={styles.rowLabel}>
+              <View style={[styles.dot, { backgroundColor: cat.dot }]} />
+              <Text style={styles.catText} numberOfLines={1}>
+                {cat.label}
+              </Text>
             </View>
-            <Text style={styles.resultPlus}>+</Text>
-            <View style={styles.resultBox}>
-              <Text style={styles.resultValue}>{remainingTrays}</Text>
-              <Text style={styles.resultUnit}>Trays</Text>
-            </View>
-            {remainingEggsInTray > 0 && (
-              <>
-                <Text style={styles.resultPlus}>+</Text>
-                <View style={styles.resultBox}>
-                  <Text style={styles.resultValue}>{remainingEggsInTray}</Text>
-                  <Text style={styles.resultUnit}>Eggs</Text>
-                </View>
-              </>
-            )}
+            <TextInput
+              style={[styles.input, { borderColor: cat.dot + "60" }]}
+              placeholder="0"
+              placeholderTextColor="#A8A29E"
+              value={entries[cat.id].cartons}
+              onChangeText={(v) => update(cat.id, "cartons", v)}
+              keyboardType="numeric"
+              returnKeyType="next"
+              selectTextOnFocus
+              maxLength={5}
+            />
+            <TextInput
+              style={[styles.input, { borderColor: cat.dot + "60" }]}
+              placeholder="0"
+              placeholderTextColor="#A8A29E"
+              value={entries[cat.id].trays}
+              onChangeText={(v) => update(cat.id, "trays", v)}
+              keyboardType="numeric"
+              returnKeyType="done"
+              selectTextOnFocus
+              maxLength={5}
+            />
           </View>
-
-          <Text style={styles.totalFormula}>
-            {cartons} Carton{cartons !== 1 ? "s" : ""} ({cartons * TRAYS_PER_CARTON} Trays) + {remainingTrays} Tray{remainingTrays !== 1 ? "s" : ""}
-            {remainingEggsInTray > 0 ? ` + ${remainingEggsInTray} Egg${remainingEggsInTray !== 1 ? "s" : ""}` : ""}
-          </Text>
-        </View>
-
-        {/* Per-category summary */}
-        {totalEggs > 0 && (
-          <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>
-              BREAKDOWN
-            </Text>
-            {EGG_CATEGORIES.filter((c) => counts[c.id] > 0).map((cat) => {
-              const catColors = CATEGORY_COLORS[cat.id];
-              const pct = totalEggs > 0 ? ((counts[cat.id] / totalEggs) * 100).toFixed(1) : "0";
-              return (
-                <View key={cat.id} style={styles.summaryRow}>
-                  <View style={[styles.summaryDot, { backgroundColor: catColors.dot }]} />
-                  <Text style={[styles.summaryLabel, { color: colors.foreground }]}>
-                    {cat.label}
-                  </Text>
-                  <Text style={[styles.summaryCount, { color: colors.foreground }]}>
-                    {counts[cat.id]}
-                  </Text>
-                  <Text style={[styles.summaryPct, { color: colors.mutedForeground }]}>
-                    {pct}%
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        )}
+        ))}
       </ScrollView>
+
+      {/* Grand Total */}
+      <View style={[styles.totalCard, { paddingBottom: botPad + 6 }]}>
+        <View style={styles.totalRow}>
+          <TotalChip label="Total Eggs" value={totalEggs.toLocaleString()} />
+          <TotalChip label="Total Trays" value={totalTrays.toLocaleString()} />
+        </View>
+        <View style={styles.resultRow}>
+          <ResultBox value={cartons} label="Cartons" />
+          <Text style={styles.plus}>+</Text>
+          <ResultBox value={remainTrays} label="Trays" />
+          {remainEggs > 0 && (
+            <>
+              <Text style={styles.plus}>+</Text>
+              <ResultBox value={remainEggs} label="Eggs" />
+            </>
+          )}
+        </View>
+        <Text style={styles.formula}>
+          {cartons} Carton{cartons !== 1 ? "s" : ""} + {remainTrays} Tray{remainTrays !== 1 ? "s" : ""}
+          {remainEggs > 0 ? ` + ${remainEggs} Egg${remainEggs !== 1 ? "s" : ""}` : ""}
+        </Text>
+      </View>
     </View>
   );
 }
 
-function InfoChip({ label, value }: { label: string; value: string }) {
+function TotalChip({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.infoChip}>
-      <Text style={styles.infoChipLabel}>{label}</Text>
-      <Text style={styles.infoChipValue}>{value}</Text>
+    <View style={styles.chip}>
+      <Text style={styles.chipLabel}>{label}</Text>
+      <Text style={styles.chipValue}>{value}</Text>
+    </View>
+  );
+}
+
+function ResultBox({ value, label }: { value: number; label: string }) {
+  return (
+    <View style={styles.resultBox}>
+      <Text style={styles.resultValue}>{value}</Text>
+      <Text style={styles.resultLabel}>{label}</Text>
     </View>
   );
 }
@@ -317,250 +188,167 @@ function InfoChip({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: "#FFFBF0",
   },
   header: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    backgroundColor: "#7C2D12",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
   },
   headerTitle: {
-    fontSize: 26,
-    fontFamily: "Inter_700Bold",
     color: "#FEF3C7",
-    letterSpacing: -0.5,
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.3,
   },
-  headerSubtitle: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+  headerSub: {
     color: "#FDE68A",
-    marginTop: 2,
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
     opacity: 0.85,
   },
   resetBtn: {
-    position: "absolute",
-    right: 20,
-    bottom: 18,
     backgroundColor: "rgba(255,255,255,0.15)",
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.25)",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  resetBtnText: {
+  resetText: {
     color: "#FEF3C7",
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
+  },
+  colHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: "#FEF3C7",
+    borderBottomWidth: 1,
+    borderBottomColor: "#FDE68A",
+  },
+  colLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#92400E",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  colCenter: {
+    width: 80,
+    textAlign: "center",
   },
   scroll: {
     flex: 1,
+    paddingHorizontal: 14,
   },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    gap: 16,
-  },
-  infoBar: {
+  row: {
     flexDirection: "row",
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
     alignItems: "center",
-    justifyContent: "space-around",
-  },
-  infoChip: {
-    alignItems: "center",
-    flex: 1,
-  },
-  infoChipLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: "#92400E",
-    opacity: 0.7,
-  },
-  infoChipValue: {
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-    color: "#78350F",
-    marginTop: 2,
-  },
-  infoDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: "#FDE68A",
-  },
-  categoriesSection: {
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: "#FEF3C7",
     gap: 8,
   },
-  sectionTitle: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 1.2,
-    marginBottom: 4,
-    marginLeft: 2,
-  },
-  categoryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  categoryLeft: {
-    flexDirection: "row",
-    alignItems: "center",
+  rowLabel: {
     flex: 1,
-    gap: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  categoryDot: {
-    width: 10,
-    height: 10,
+  dot: {
+    width: 9,
+    height: 9,
     borderRadius: 5,
   },
-  categoryLabel: {
-    fontSize: 15,
+  catText: {
+    fontSize: 13,
     fontFamily: "Inter_500Medium",
+    color: "#1C1917",
+    flexShrink: 1,
   },
-  counterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  counterBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  decrementBtn: {
-    backgroundColor: "#FDE68A",
-  },
-  decrementBtnText: {
-    fontSize: 20,
-    color: "#92400E",
-    lineHeight: 22,
-    fontFamily: "Inter_600SemiBold",
-  },
-  incrementBtn: {},
-  incrementBtnText: {
-    fontSize: 20,
-    color: "#FFFFFF",
-    lineHeight: 22,
-    fontFamily: "Inter_600SemiBold",
-  },
-  countInput: {
-    width: 60,
-    height: 34,
-    textAlign: "center",
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    backgroundColor: "rgba(255,255,255,0.7)",
+  input: {
+    width: 74,
+    height: 36,
+    borderWidth: 1.5,
     borderRadius: 8,
+    textAlign: "center",
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#1C1917",
+    backgroundColor: "#FFFFFF",
     paddingVertical: 0,
   },
   totalCard: {
-    borderRadius: 18,
-    padding: 20,
-    gap: 14,
+    backgroundColor: "#7C2D12",
+    paddingTop: 14,
+    paddingHorizontal: 16,
+    gap: 10,
   },
-  totalTitle: {
-    color: "#FDE68A",
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 1.5,
-  },
-  totalEggsRow: {
+  totalRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 10,
+  },
+  chip: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 10,
+    paddingVertical: 7,
     alignItems: "center",
   },
-  totalEggsLabel: {
-    color: "rgba(254,243,199,0.8)",
-    fontSize: 14,
+  chipLabel: {
+    color: "rgba(254,243,199,0.7)",
+    fontSize: 10,
     fontFamily: "Inter_400Regular",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
-  totalEggsValue: {
+  chipValue: {
     color: "#FEF3C7",
     fontSize: 18,
     fontFamily: "Inter_700Bold",
   },
-  totalDivider: {
-    height: 1,
-    backgroundColor: "rgba(254,243,199,0.2)",
-  },
-  resultSection: {
+  resultRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    marginTop: 4,
   },
   resultBox: {
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.12)",
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 14,
-    minWidth: 80,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    minWidth: 70,
   },
   resultValue: {
-    fontSize: 36,
+    fontSize: 28,
     fontFamily: "Inter_700Bold",
     color: "#FEF3C7",
-    lineHeight: 40,
+    lineHeight: 32,
   },
-  resultUnit: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
+  resultLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
     color: "rgba(254,243,199,0.75)",
-    marginTop: 2,
   },
-  resultPlus: {
-    fontSize: 22,
-    color: "rgba(254,243,199,0.5)",
+  plus: {
+    fontSize: 18,
+    color: "rgba(254,243,199,0.45)",
     fontFamily: "Inter_400Regular",
   },
-  totalFormula: {
+  formula: {
     textAlign: "center",
-    color: "rgba(254,243,199,0.65)",
-    fontSize: 12,
+    color: "rgba(254,243,199,0.55)",
+    fontSize: 11,
     fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
-  summaryCard: {
-    borderRadius: 16,
-    padding: 16,
-    gap: 10,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  summaryDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  summaryLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-  },
-  summaryCount: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    minWidth: 50,
-    textAlign: "right",
-  },
-  summaryPct: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    minWidth: 42,
-    textAlign: "right",
+    paddingBottom: 4,
   },
 });
