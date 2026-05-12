@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "Xifu3plG-c5ujRH6YI86Z"
+uri = "file://artifacts/egg-calculator/assets/images/icon.png"
+type = "image"
+title = "egg calculator icon"
