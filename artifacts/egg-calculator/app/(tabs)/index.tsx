@@ -8,18 +8,23 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const EGG_CATEGORIES = [
-  { id: "small", label: "Small Egg", dot: "#F59E0B" },
-  { id: "normal", label: "Normal Egg", dot: "#22C55E" },
-  { id: "crack", label: "Crack Egg", dot: "#FB7185" },
-  { id: "dirty", label: "Dirty Egg", dot: "#FB923C" },
-  { id: "double_yolk", label: "Double Yolk", dot: "#A78BFA" },
-  { id: "brown", label: "Brown Egg", dot: "#92400E" },
-  { id: "liquid", label: "Liquid Egg", dot: "#60A5FA" },
+  { id: "small", label: "Small Egg", dot: "#F59E0B", color: "#F59E0B" },
+  { id: "normal", label: "Normal Egg", dot: "#22C55E", color: "#22C55E" },
+  { id: "crack", label: "Crack Egg", dot: "#FB7185", color: "#FB7185" },
+  { id: "dirty", label: "Dirty Egg", dot: "#FB923C", color: "#FB923C" },
+  { id: "double_yolk", label: "Double Yolk", dot: "#A78BFA", color: "#A78BFA" },
+  { id: "brown", label: "Brown Egg", dot: "#92400E", color: "#92400E" },
+  { id: "liquid", label: "Liquid Egg", dot: "#60A5FA", color: "#60A5FA" },
 ] as const;
 
 type CategoryId = (typeof EGG_CATEGORIES)[number]["id"];
@@ -38,7 +43,8 @@ function toNum(s: string) {
 function calcTotals(entries: Record<CategoryId, Entry>) {
   let totalEggs = 0;
   for (const e of Object.values(entries)) {
-    totalEggs += toNum(e.cartons) * EGGS_PER_CARTON + toNum(e.trays) * EGGS_PER_TRAY;
+    totalEggs +=
+      toNum(e.cartons) * EGGS_PER_CARTON + toNum(e.trays) * EGGS_PER_TRAY;
   }
   const totalTrays = Math.floor(totalEggs / EGGS_PER_TRAY);
   const remainEggs = totalEggs % EGGS_PER_TRAY;
@@ -47,22 +53,115 @@ function calcTotals(entries: Record<CategoryId, Entry>) {
   return { totalEggs, totalTrays, cartons, remainTrays, remainEggs };
 }
 
+function formatDate(d: Date) {
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 const initEntries = (): Record<CategoryId, Entry> =>
   Object.fromEntries(
     EGG_CATEGORIES.map((c) => [c.id, { cartons: "", trays: "" }])
   ) as Record<CategoryId, Entry>;
 
+function buildHtml(
+  farmName: string,
+  date: Date,
+  entries: Record<CategoryId, Entry>,
+  totals: ReturnType<typeof calcTotals>
+) {
+  const rows = EGG_CATEGORIES.map((cat) => {
+    const c = toNum(entries[cat.id].cartons);
+    const t = toNum(entries[cat.id].trays);
+    const eggs = c * EGGS_PER_CARTON + t * EGGS_PER_TRAY;
+    return `
+      <tr>
+        <td><span class="dot" style="background:${cat.color}"></span>${cat.label}</td>
+        <td>${c}</td>
+        <td>${t}</td>
+        <td>${eggs.toLocaleString()}</td>
+      </tr>`;
+  }).join("");
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; background: #fff; color: #1C1917; }
+  .header { background: #7C2D12; color: #FEF3C7; padding: 24px 28px 18px; }
+  .header h1 { margin: 0; font-size: 22px; }
+  .header p { margin: 4px 0 0; font-size: 12px; opacity: 0.75; }
+  .meta { display: flex; justify-content: space-between; margin: 0; padding: 10px 28px; background: #FEF3C7; font-size: 12px; color: #92400E; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; margin: 0; }
+  th { background: #FEF3C7; color: #92400E; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; padding: 8px 28px; text-align: left; }
+  td { padding: 9px 28px; border-bottom: 1px solid #FEF3C7; font-size: 13px; }
+  td:not(:first-child) { text-align: center; font-weight: bold; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+  .total-section { background: #7C2D12; color: #FEF3C7; padding: 18px 28px; margin-top: 0; }
+  .total-grid { display: flex; gap: 12px; margin-bottom: 14px; }
+  .total-chip { flex: 1; background: rgba(255,255,255,0.12); border-radius: 8px; padding: 10px; text-align: center; }
+  .total-chip .lbl { font-size: 10px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px; }
+  .total-chip .val { font-size: 20px; font-weight: bold; margin-top: 2px; }
+  .result-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .result-box { background: rgba(255,255,255,0.14); border-radius: 10px; padding: 10px 16px; text-align: center; min-width: 70px; }
+  .result-box .big { font-size: 28px; font-weight: bold; }
+  .result-box .sm { font-size: 10px; opacity: 0.75; }
+  .plus { font-size: 18px; opacity: 0.45; }
+  .formula { text-align: center; font-size: 11px; opacity: 0.55; margin-top: 8px; }
+  .footer { text-align: center; font-size: 10px; color: #A8A29E; padding: 14px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>${farmName}</h1>
+  <p>Egg Production Report</p>
+</div>
+<div class="meta">
+  <span>Date: ${formatDate(date)}</span>
+  <span>Generated by Egg Production Calculator</span>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>Category</th><th style="text-align:center">Cartons</th><th style="text-align:center">Trays</th><th style="text-align:center">Eggs</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="total-section">
+  <div class="total-grid">
+    <div class="total-chip"><div class="lbl">Total Eggs</div><div class="val">${totals.totalEggs.toLocaleString()}</div></div>
+    <div class="total-chip"><div class="lbl">Total Trays</div><div class="val">${totals.totalTrays.toLocaleString()}</div></div>
+  </div>
+  <div class="result-row">
+    <div class="result-box"><div class="big">${totals.cartons}</div><div class="sm">Cartons</div></div>
+    <span class="plus">+</span>
+    <div class="result-box"><div class="big">${totals.remainTrays}</div><div class="sm">Trays</div></div>
+    ${totals.remainEggs > 0 ? `<span class="plus">+</span><div class="result-box"><div class="big">${totals.remainEggs}</div><div class="sm">Eggs</div></div>` : ""}
+  </div>
+  <div class="formula">${totals.cartons} Carton${totals.cartons !== 1 ? "s" : ""} + ${totals.remainTrays} Tray${totals.remainTrays !== 1 ? "s" : ""}${totals.remainEggs > 0 ? ` + ${totals.remainEggs} Egg${totals.remainEggs !== 1 ? "s" : ""}` : ""}</div>
+</div>
+<div class="footer">1 Tray = 30 Eggs &nbsp;|&nbsp; 1 Carton = 12 Trays = 360 Eggs</div>
+</body>
+</html>`;
+}
+
 export default function EggCalculator() {
   const insets = useSafeAreaInsets();
+
+  const [farmName, setFarmName] = useState("My Farm");
+  const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [entries, setEntries] = useState<Record<CategoryId, Entry>>(initEntries);
+  const [sharing, setSharing] = useState(false);
 
   const update = useCallback(
     (id: CategoryId, field: "cartons" | "trays", val: string) => {
       const clean = val.replace(/[^0-9]/g, "");
-      setEntries((prev) => ({
-        ...prev,
-        [id]: { ...prev[id], [field]: clean },
-      }));
+      setEntries((prev) => ({ ...prev, [id]: { ...prev[id], [field]: clean } }));
     },
     []
   );
@@ -72,9 +171,30 @@ export default function EggCalculator() {
     setEntries(initEntries());
   }, []);
 
-  const { totalEggs, totalTrays, cartons, remainTrays, remainEggs } =
-    calcTotals(entries);
+  const handleShare = useCallback(async () => {
+    setSharing(true);
+    try {
+      const totals = calcTotals(entries);
+      const html = buildHtml(farmName || "My Farm", date, entries, totals);
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/pdf",
+          dialogTitle: "Share Egg Production Report",
+          UTI: "com.adobe.pdf",
+        });
+      } else {
+        await Print.printAsync({ html });
+      }
+    } catch {
+      Alert.alert("Error", "Could not generate report. Please try again.");
+    } finally {
+      setSharing(false);
+    }
+  }, [entries, farmName, date]);
 
+  const totals = calcTotals(entries);
   const topPad = Platform.OS === "web" ? 44 : insets.top;
   const botPad = Platform.OS === "web" ? 20 : insets.bottom + 8;
 
@@ -84,14 +204,41 @@ export default function EggCalculator() {
 
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Egg Production</Text>
-          <Text style={styles.headerSub}>Daily Count Calculator</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerSub}>FARM NAME</Text>
+          <TextInput
+            style={styles.farmInput}
+            value={farmName}
+            onChangeText={setFarmName}
+            placeholder="Enter farm name"
+            placeholderTextColor="rgba(254,243,199,0.5)"
+            returnKeyType="done"
+            maxLength={30}
+          />
         </View>
-        <TouchableOpacity style={styles.resetBtn} onPress={handleReset}>
-          <Text style={styles.resetText}>Reset</Text>
-        </TouchableOpacity>
+
+        <View style={styles.headerRight}>
+          <Text style={styles.headerSub}>DATE</Text>
+          <TouchableOpacity
+            style={styles.dateBtn}
+            onPress={() => setShowDatePicker(true)}
+          >
+            <Text style={styles.dateText}>{formatDate(date)}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={date}
+          mode="date"
+          display={Platform.OS === "ios" ? "inline" : "default"}
+          onChange={(_event: any, selected?: Date) => {
+            setShowDatePicker(false);
+            if (selected) setDate(selected);
+          }}
+        />
+      )}
 
       {/* Column labels */}
       <View style={styles.colHeader}>
@@ -144,24 +291,44 @@ export default function EggCalculator() {
       {/* Grand Total */}
       <View style={[styles.totalCard, { paddingBottom: botPad + 6 }]}>
         <View style={styles.totalRow}>
-          <TotalChip label="Total Eggs" value={totalEggs.toLocaleString()} />
-          <TotalChip label="Total Trays" value={totalTrays.toLocaleString()} />
+          <TotalChip label="Total Eggs" value={totals.totalEggs.toLocaleString()} />
+          <TotalChip label="Total Trays" value={totals.totalTrays.toLocaleString()} />
         </View>
         <View style={styles.resultRow}>
-          <ResultBox value={cartons} label="Cartons" />
+          <ResultBox value={totals.cartons} label="Cartons" />
           <Text style={styles.plus}>+</Text>
-          <ResultBox value={remainTrays} label="Trays" />
-          {remainEggs > 0 && (
+          <ResultBox value={totals.remainTrays} label="Trays" />
+          {totals.remainEggs > 0 && (
             <>
               <Text style={styles.plus}>+</Text>
-              <ResultBox value={remainEggs} label="Eggs" />
+              <ResultBox value={totals.remainEggs} label="Eggs" />
             </>
           )}
         </View>
         <Text style={styles.formula}>
-          {cartons} Carton{cartons !== 1 ? "s" : ""} + {remainTrays} Tray{remainTrays !== 1 ? "s" : ""}
-          {remainEggs > 0 ? ` + ${remainEggs} Egg${remainEggs !== 1 ? "s" : ""}` : ""}
+          {totals.cartons} Carton{totals.cartons !== 1 ? "s" : ""} +{" "}
+          {totals.remainTrays} Tray{totals.remainTrays !== 1 ? "s" : ""}
+          {totals.remainEggs > 0
+            ? ` + ${totals.remainEggs} Egg${totals.remainEggs !== 1 ? "s" : ""}`
+            : ""}
         </Text>
+
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.resetBtn} onPress={handleReset}>
+            <Text style={styles.resetText}>↺  Reset</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.shareBtn}
+            onPress={handleShare}
+            disabled={sharing}
+          >
+            {sharing ? (
+              <ActivityIndicator color="#7C2D12" size="small" />
+            ) : (
+              <Text style={styles.shareText}>📄  Share Report</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -186,40 +353,45 @@ function ResultBox({ value, label }: { value: number; label: string }) {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: "#FFFBF0",
-  },
+  root: { flex: 1, backgroundColor: "#FFFBF0" },
   header: {
     backgroundColor: "#7C2D12",
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 12,
+    gap: 12,
   },
-  headerTitle: {
+  headerLeft: { flex: 1 },
+  headerRight: { alignItems: "flex-end" },
+  headerSub: {
+    color: "rgba(254,243,199,0.6)",
+    fontSize: 9,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 1,
+    marginBottom: 3,
+  },
+  farmInput: {
     color: "#FEF3C7",
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: "Inter_700Bold",
     letterSpacing: -0.3,
+    padding: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(254,243,199,0.3)",
+    minWidth: 120,
   },
-  headerSub: {
-    color: "#FDE68A",
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    opacity: 0.85,
-  },
-  resetBtn: {
+  dateBtn: {
     backgroundColor: "rgba(255,255,255,0.15)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.25)",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
-  resetText: {
+  dateText: {
     color: "#FEF3C7",
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
@@ -240,14 +412,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
-  colCenter: {
-    width: 80,
-    textAlign: "center",
-  },
-  scroll: {
-    flex: 1,
-    paddingHorizontal: 14,
-  },
+  colCenter: { width: 80, textAlign: "center" },
+  scroll: { flex: 1, paddingHorizontal: 14 },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -256,17 +422,8 @@ const styles = StyleSheet.create({
     borderBottomColor: "#FEF3C7",
     gap: 8,
   },
-  rowLabel: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  dot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-  },
+  rowLabel: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  dot: { width: 9, height: 9, borderRadius: 5 },
   catText: {
     fontSize: 13,
     fontFamily: "Inter_500Medium",
@@ -287,19 +444,16 @@ const styles = StyleSheet.create({
   },
   totalCard: {
     backgroundColor: "#7C2D12",
-    paddingTop: 14,
+    paddingTop: 12,
     paddingHorizontal: 16,
-    gap: 10,
+    gap: 8,
   },
-  totalRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  totalRow: { flexDirection: "row", gap: 10 },
   chip: {
     flex: 1,
     backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
     alignItems: "center",
   },
   chipLabel: {
@@ -311,36 +465,36 @@ const styles = StyleSheet.create({
   },
   chipValue: {
     color: "#FEF3C7",
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: "Inter_700Bold",
   },
   resultRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
   },
   resultBox: {
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.14)",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 12,
-    minWidth: 70,
+    minWidth: 66,
   },
   resultValue: {
-    fontSize: 28,
+    fontSize: 26,
     fontFamily: "Inter_700Bold",
     color: "#FEF3C7",
-    lineHeight: 32,
+    lineHeight: 30,
   },
   resultLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: "Inter_400Regular",
     color: "rgba(254,243,199,0.75)",
   },
   plus: {
-    fontSize: 18,
+    fontSize: 16,
     color: "rgba(254,243,199,0.45)",
     fontFamily: "Inter_400Regular",
   },
@@ -349,6 +503,33 @@ const styles = StyleSheet.create({
     color: "rgba(254,243,199,0.55)",
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    paddingBottom: 4,
+  },
+  actionRow: { flexDirection: "row", gap: 10, paddingTop: 4 },
+  resetBtn: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    paddingVertical: 9,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  resetText: {
+    color: "#FEF3C7",
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  shareBtn: {
+    flex: 2,
+    backgroundColor: "#FEF3C7",
+    paddingVertical: 9,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shareText: {
+    color: "#7C2D12",
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
   },
 });
