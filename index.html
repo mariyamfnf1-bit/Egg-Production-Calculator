@@ -1,24 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Egg Production Calculator</title>
-    <meta name="description" content="Egg Production Calculator — built on Replit. Update this description to reflect the app." />
-    <meta name="robots" content="index, follow" />
-    <meta property="og:title" content="Egg Production Calculator" />
-    <meta property="og:description" content="Egg Production Calculator — built on Replit. Update this description to reflect the app." />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Egg Production Calculator" />
-    <meta name="twitter:description" content="Egg Production Calculator — built on Replit. Update this description to reflect the app." />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 380px; text-align: center; }
+        h2 { color: #2d3436; margin-bottom: 20px; font-weight: 700; }
+        .input-group { margin-bottom: 15px; text-align: left; }
+        label { display: block; margin-bottom: 5px; color: #636e72; font-weight: 500; }
+        input { width: 100%; padding: 12px; border: 2px solid #dfe6e9; border-radius: 10px; box-sizing: border-box; font-size: 16px; outline: none; transition: border-color 0.3s; }
+        input:focus { border-color: #00b894; }
+        button { width: 100%; padding: 14px; background-color: #00b894; color: white; border: none; border-radius: 10px; font-size: 18px; font-weight: 600; cursor: pointer; margin-top: 10px; box-shadow: 0 4px 6px rgba(0,184,148,0.2); }
+        button:active { transform: scale(0.98); }
+        #result-box { margin-top: 25px; padding: 15px; border-radius: 12px; background-color: #e8f8f5; display: none; }
+        .res-text { font-size: 20px; color: #00b894; font-weight: 700; margin: 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Egg Calculator</h2>
+    
+    <div class="input-group">
+        <label>Total Birds</label>
+        <input type="number" id="birds" placeholder="e.g. 1000">
+    </div>
+
+    <div class="input-group">
+        <label>Total Eggs Collected</label>
+        <input type="number" id="eggs" placeholder="e.g. 850">
+    </div>
+
+    <button onclick="calculate()">Calculate Production</button>
+
+    <div id="result-box">
+        <p class="res-text" id="result"></p>
+    </div>
+</div>
+
+<script>
+    function calculate() {
+        const birds = document.getElementById('birds').value;
+        const eggs = document.getElementById('eggs').value;
+        const resBox = document.getElementById('result-box');
+        const resText = document.getElementById('result');
+
+        if (birds > 0 && eggs !== "") {
+            const percentage = (eggs / birds) * 100;
+            resBox.style.display = 'block';
+            resText.innerHTML = "Production: " + percentage.toFixed(2) + "%";
+        } else {
+            alert("Please enter valid bird and egg counts.");
+        }
+    }
+</script>
+
+</body>
 </html>
