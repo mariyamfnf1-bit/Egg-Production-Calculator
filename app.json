@@ -1,5 +1,10 @@
 {
   "expo": {
+    "name": "Egg Production Calculator",
+    "slug": "egg-production-calculator",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "platforms": ["ios", "android", "web"],
     "extra": {
       "eas": {
         "projectId": "1422089a-d03a-4de9-ac2e-467207aca7ce"
