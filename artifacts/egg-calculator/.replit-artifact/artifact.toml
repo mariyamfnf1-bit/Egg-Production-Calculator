@@ -1,6 +1,6 @@
 kind = "mobile"
-previewPath = "/"
-title = "Egg Production Calculator"
+previewPath = "/mobile"
+title = "Egg Production Calculator (Mobile)"
 version = "1.0.0"
 id = "artifacts/egg-calculator"
 router = "expo-domain"
@@ -12,16 +12,8 @@ version = "1.0.0"
 [[services]]
 ensurePreviewReachable = "/status"
 name = "expo"
-paths = [ "/" ]
+paths = [ "/mobile" ]
 localPort = 22682
 
 [services.development]
 run = "pnpm --filter @workspace/egg-calculator run dev"
-
-[services.production]
-build = [ "pnpm", "--filter", "@workspace/egg-calculator", "run", "build" ]
-run = [ "pnpm", "--filter", "@workspace/egg-calculator", "run", "serve" ]
-
-[services.env]
-PORT = "22682"
-BASE_PATH = "/"
