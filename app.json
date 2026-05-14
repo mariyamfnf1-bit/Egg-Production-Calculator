@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "1422089a-d03a-4de9-ac2e-467207aca7ce"
+      }
+    },
+    "android": {
+      "package": "com.mariyamfarms.workspace"
+    }
+  }
+}

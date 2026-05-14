@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/egg-web/"
+title = "Egg Production Calculator"
+version = "1.0.0"
+id = "artifacts/egg-web"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/egg-web/" ]
+localPort = 24179
+
+[services.development]
+run = "pnpm --filter @workspace/egg-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/egg-web", "run", "build" ]
+publicDir = "artifacts/egg-web/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24179"
+BASE_PATH = "/egg-web/"
